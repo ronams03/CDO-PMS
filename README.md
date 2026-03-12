@@ -80,17 +80,6 @@ bun run dev
 
 The application will be available at `http://localhost:3000`
 
-## 👤 Demo Accounts
-
-| Role | Email | Password |
-|------|-------|----------|
-| Super Admin | superadmin@cdo.gov.ph | password123 |
-| LGU Admin | admin@cdo.gov.ph | password123 |
-| Department Head | dept.civilreg@cdo.gov.ph | password123 |
-| Staff | staff.civilreg@cdo.gov.ph | password123 |
-| Barangay Official | captain.carmen@cdo.gov.ph | password123 |
-| Citizen | citizen@cdo.gov.ph | password123 |
-
 ## 📁 Project Structure
 
 ```

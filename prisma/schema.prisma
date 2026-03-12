@@ -1,0 +1,493 @@
+// Cagayan de Oro City Local Government Unit Management System
+// Comprehensive Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+enum UserRole {
+  SUPER_ADMIN
+  LGU_ADMIN
+  DEPARTMENT_HEAD
+  STAFF
+  BARANGAY_OFFICIAL
+  CITIZEN
+}
+
+enum RequestStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  COMPLETED
+}
+
+enum ComplaintStatus {
+  SUBMITTED
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PermitStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum AnnouncementStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum CivilStatus {
+  SINGLE
+  MARRIED
+  WIDOWED
+  DIVORCED
+  SEPARATED
+}
+
+enum EmploymentStatus {
+  EMPLOYED
+  UNEMPLOYED
+  SELF_EMPLOYED
+  RETIRED
+  STUDENT
+}
+
+// ============ CORE USER MANAGEMENT ============
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  firstName         String
+  middleName        String?
+  lastName          String
+  suffix            String?
+  phone             String?
+  avatar            String?
+  role              UserRole  @default(STAFF)
+  isActive          Boolean   @default(true)
+  emailVerified     DateTime?
+  lastLoginAt       DateTime?
+  departmentId      String?
+  barangayId        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  department        Department?   @relation(fields: [departmentId], references: [id])
+  barangay          Barangay?     @relation(fields: [barangayId], references: [id])
+  resident          Resident?     @relation("UserResident")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  createdRequests   ServiceRequest[]  @relation("RequestCreator")
+  processedRequests ServiceRequest[]  @relation("RequestProcessor")
+  complaints        Complaint[]       @relation("ComplaintCreator")
+  handledComplaints Complaint[]       @relation("ComplaintHandler")
+  permits           Permit[]
+  announcements     Announcement[]
+  appointments      Appointment[]     @relation("AppointmentUser")
+  appointmentSlots  AppointmentSlot[]
+}
+
+// ============ RESIDENT/CITIZEN RECORDS ============
+model Resident {
+  id                    String            @id @default(cuid())
+  userId                String?           @unique
+  firstName             String
+  middleName            String?
+  lastName              String
+  suffix                String?
+  birthDate             DateTime?
+  gender                Gender?
+  civilStatus           CivilStatus?
+  nationality           String?
+  religion              String?
+  occupation            String?
+  employmentStatus      EmploymentStatus?
+  educationLevel        String?
+  bloodType             String?
+  email                 String?
+  phone                 String?
+  addressLine1          String?
+  addressLine2          String?
+  barangayId            String?
+  postalCode            String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRelation String?
+  isVoter               Boolean           @default(false)
+  isHeadOfHousehold     Boolean           @default(false)
+  householdId           String?
+  fourPsMember          Boolean           @default(false)
+  seniorCitizen         Boolean           @default(false)
+  pwd                   Boolean           @default(false)
+  soloParent            Boolean           @default(false)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  
+  user                  User?             @relation("UserResident", fields: [userId], references: [id])
+  barangay              Barangay?         @relation(fields: [barangayId], references: [id])
+  household             Household?        @relation(fields: [householdId], references: [id])
+  requests              ServiceRequest[]
+  complaints            Complaint[]
+  permits               Permit[]
+}
+
+model Household {
+  id                String    @id @default(cuid())
+  householdNumber   String    @unique
+  addressLine1      String
+  addressLine2      String?
+  barangayId        String
+  postalCode        String?
+  headOfHouseholdId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  barangay          Barangay  @relation(fields: [barangayId], references: [id])
+  members           Resident[]
+}
+
+// ============ BARANGAY & DEPARTMENT MANAGEMENT ============
+model Barangay {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  name            String
+  district        String?
+  population      Int?
+  areaSqKm        Float?
+  captainName     String?
+  captainPhone    String?
+  captainEmail    String?
+  officeAddress   String?
+  officeHours     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  residents       Resident[]
+  households      Household[]
+  users           User[]
+  complaints      Complaint[]
+}
+
+model Department {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  name            String
+  shortName       String
+  description     String?
+  headName        String?
+  headEmail       String?
+  headPhone       String?
+  officeAddress   String?
+  officeHours     String?
+  order           Int       @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  users           User[]
+  services        Service[]
+  permitTypes     PermitType[]
+}
+
+model Service {
+  id              String    @id @default(cuid())
+  departmentId    String
+  code            String    @unique
+  name            String
+  description     String?
+  requirements    String?
+  processingDays  Int       @default(7)
+  fee             Float     @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  department      Department  @relation(fields: [departmentId], references: [id])
+  requests        ServiceRequest[]
+}
+
+// ============ SERVICE REQUESTS & APPROVAL WORKFLOWS ============
+model ServiceRequest {
+  id              String        @id @default(cuid())
+  referenceNumber String        @unique
+  serviceId       String
+  residentId      String?
+  createdById     String
+  processedById   String?
+  status          RequestStatus @default(PENDING)
+  priority        ComplaintPriority @default(MEDIUM)
+  purpose         String
+  remarks         String?
+  adminRemarks    String?
+  submittedAt     DateTime      @default(now())
+  processedAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  service         Service       @relation(fields: [serviceId], references: [id])
+  resident        Resident?     @relation(fields: [residentId], references: [id])
+  creator         User          @relation("RequestCreator", fields: [createdById], references: [id])
+  processor       User?         @relation("RequestProcessor", fields: [processedById], references: [id])
+  attachments     RequestAttachment[]
+  statusHistory   RequestStatusHistory[]
+}
+
+model RequestAttachment {
+  id          String  @id @default(cuid())
+  requestId   String
+  fileName    String
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  uploadedAt  DateTime @default(now())
+  
+  request     ServiceRequest @relation(fields: [requestId], references: [id])
+}
+
+model RequestStatusHistory {
+  id          String        @id @default(cuid())
+  requestId   String
+  status      RequestStatus
+  remarks     String?
+  changedById String
+  changedAt   DateTime      @default(now())
+  
+  request     ServiceRequest @relation(fields: [requestId], references: [id])
+}
+
+// ============ COMPLAINTS & INCIDENT REPORTING ============
+model Complaint {
+  id              String            @id @default(cuid())
+  referenceNumber String            @unique
+  barangayId      String?
+  residentId      String?
+  createdById     String
+  assignedToId    String?
+  category        String
+  subCategory     String?
+  title           String
+  description     String
+  location        String?
+  latitude        Float?
+  longitude       Float?
+  status          ComplaintStatus   @default(SUBMITTED)
+  priority        ComplaintPriority @default(MEDIUM)
+  incidentDate    DateTime?
+  resolution      String?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  barangay        Barangay?         @relation(fields: [barangayId], references: [id])
+  resident        Resident?         @relation(fields: [residentId], references: [id])
+  creator         User              @relation("ComplaintCreator", fields: [createdById], references: [id])
+  handler         User?             @relation("ComplaintHandler", fields: [assignedToId], references: [id])
+  attachments     ComplaintAttachment[]
+  statusHistory   ComplaintStatusHistory[]
+}
+
+model ComplaintAttachment {
+  id          String    @id @default(cuid())
+  complaintId String
+  fileName    String
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  uploadedAt  DateTime  @default(now())
+  
+  complaint   Complaint @relation(fields: [complaintId], references: [id])
+}
+
+model ComplaintStatusHistory {
+  id          String          @id @default(cuid())
+  complaintId String
+  status      ComplaintStatus
+  remarks     String?
+  changedById String
+  changedAt   DateTime        @default(now())
+  
+  complaint   Complaint @relation(fields: [complaintId], references: [id])
+}
+
+// ============ ANNOUNCEMENTS & NOTIFICATIONS ============
+model Announcement {
+  id          String              @id @default(cuid())
+  title       String
+  content     String
+  category    String
+  priority    ComplaintPriority   @default(MEDIUM)
+  status      AnnouncementStatus  @default(DRAFT)
+  authorId    String
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  
+  author      User                @relation(fields: [authorId], references: [id])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  message     String
+  type        String
+  referenceId String?
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+// ============ APPOINTMENT SCHEDULING ============
+model AppointmentSlot {
+  id          String    @id @default(cuid())
+  createdById String
+  date        DateTime
+  startTime   String
+  endTime     String
+  maxSlots    Int       @default(10)
+  bookedSlots Int       @default(0)
+  serviceId   String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  creator     User      @relation(fields: [createdById], references: [id])
+  appointments Appointment[]
+}
+
+model Appointment {
+  id          String    @id @default(cuid())
+  slotId      String
+  userId      String
+  referenceNumber String @unique
+  purpose     String
+  remarks     String?
+  status      String    @default("SCHEDULED")
+  queueNumber Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  slot        AppointmentSlot @relation(fields: [slotId], references: [id])
+  user        User      @relation("AppointmentUser", fields: [userId], references: [id])
+}
+
+// ============ PERMITS & LICENSING ============
+model PermitType {
+  id              String    @id @default(cuid())
+  departmentId    String
+  code            String    @unique
+  name            String
+  description     String?
+  requirements    String?
+  processingDays  Int       @default(7)
+  fee             Float     @default(0)
+  validityDays    Int       @default(365)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  department      Department @relation(fields: [departmentId], references: [id])
+  permits         Permit[]
+}
+
+model Permit {
+  id              String        @id @default(cuid())
+  referenceNumber String        @unique
+  permitTypeId    String
+  residentId      String?
+  applicantId     String
+  businessName    String?
+  businessAddress String?
+  businessType    String?
+  status          PermitStatus  @default(DRAFT)
+  validFrom       DateTime?
+  validUntil      DateTime?
+  issuedAt        DateTime?
+  remarks         String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  permitType      PermitType    @relation(fields: [permitTypeId], references: [id])
+  resident        Resident?     @relation(fields: [residentId], references: [id])
+  applicant       User          @relation(fields: [applicantId], references: [id])
+  attachments     PermitAttachment[]
+}
+
+model PermitAttachment {
+  id          String    @id @default(cuid())
+  permitId    String
+  fileName    String
+  filePath    String
+  fileSize    Int
+  mimeType    String
+  uploadedAt  DateTime  @default(now())
+  
+  permit      Permit    @relation(fields: [permitId], references: [id])
+}
+
+// ============ AUDIT TRAIL ============
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String
+  oldValues   String?
+  newValues   String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+// ============ LOOKUP TABLES ============
+model ComplaintCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+model DocumentCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
